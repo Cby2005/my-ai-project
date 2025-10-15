@@ -5,7 +5,7 @@ import socket
 # !! 重要 !!
 # 1. 在你的电脑上本地测试服务器时, 请将 SERVER_HOST 设置为 '127.0.0.1'
 # 2. 当你将服务器部署到云端后, 请将 SERVER_HOST 替换成你【服务器的公网IP地址】
-SERVER_HOST = '127.0.0.1'
+SERVER_HOST = '39.103.63.159'
 SERVER_PORT = 5000
 IMAGE_PATH = 'test_image.jpg'  # 要发送进行分析的图片文件名
 RESULT_PATH = 'result_from_server.jpg'  # 从服务器接收到的结果，要保存的文件名
