@@ -1,5 +1,5 @@
 # 第1步：选择基础环境 - 使用国内镜像源
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 # 第2步：在镜像内部创建工作目录
 WORKDIR /app
