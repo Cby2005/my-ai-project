@@ -18,28 +18,3 @@ services:
     command: python ai_server.py
     volumes:
       - .:/app
-```
-
-#### **4. 更新 `Dockerfile` 和 `requirements.txt`**
-我们需要确保环境能同时支持这两个应用。
-
-* **`requirements.txt`**: 确保里面包含了 `flask` 和 `gunicorn`。
-* **`Dockerfile`**: 我们之前的最终版`Dockerfile`已经非常完美，**无需做任何修改！** 它构建的镜像同时包含了运行Flask和Socket服务器所需的所有东西。
-
----
-
-### **第二步：全新的云端部署流程**
-
-现在，你的部署流程将变得异常简单和专业！
-
-1.  **本地**：将所有新文件和改动 `git push` 到Gitee。
-2.  **云服务器**：
-    * `ssh` 登录后，`cd my-ai-project`，然后 `git pull` 拉取最新代码。
-    * **安装 Docker Compose**:
-        ```bash
-        apt-get install docker-compose -y
-        ```
-    * **一键启动所有服务**:
-        ```bash
-        docker-compose up --build -d
-        
