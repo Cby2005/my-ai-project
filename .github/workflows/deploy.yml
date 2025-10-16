@@ -1,0 +1,25 @@
+name: Deploy to Cloud Server
+
+on:
+  push:
+    branches:
+      - master # 当 master 分支有代码推送时触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy Application via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/my-ai-project
+            git pull
+            echo "Starting deployment..."
+            docker-compose up --build -d
+            echo "Cleaning up old images..."
+            docker system prune -a -f
+            echo "Deployment successful!"
