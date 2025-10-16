@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, send_file, Response, jsonify
+from flask import Flask, request, render_template, send_file, jsonify
 import socket
 import io
 
@@ -7,7 +7,7 @@ app = Flask(__name__)
 # Docker Compose会自动将这个服务名解析为AI服务器的IP地址
 # 在docker-compose.yml中，我们定义了AI服务器的服务名为 'ai_server'
 AI_SERVER_HOST = 'ai_server'
-AI_SERVER_PORT = 5001  # 我们为AI服务指定的内部端口
+AI_SERVER_PORT = 5001  # 【关键修正】确保我们联系的是AI服务器正确的端口 5001
 BUFFER_SIZE = 4096
 
 
@@ -35,7 +35,6 @@ def detect():
 
     if file:
         image_bytes = file.read()
-
         # 2. 【关键升级】使用一个大的try...except块包裹所有与后端服务的通信
         #    这样无论后端发生任何网络错误，这个网关服务本身都不会崩溃。
         try:
@@ -68,12 +67,7 @@ def detect():
                     return jsonify({"error": "AI服务器返回了空数据"}), 500
 
                 print(f"Web Gateway: 已接收 {len(result_data)} 字节结果。")
-
-                # 将结果图片作为响应发回给浏览器
-                return send_file(
-                    io.BytesIO(result_data),
-                    mimetype='image/jpeg'
-                )
+                return send_file(io.BytesIO(result_data), mimetype='image/jpeg')
 
         # 3. 捕获所有可能的异常，并返回一个清晰的JSON错误给前端
         except socket.timeout:
@@ -89,6 +83,6 @@ def detect():
 
 
 if __name__ == '__main__':
-    # 这里的端口是给浏览器访问的
+    # 对外营业的端口是 5000
     app.run(host='0.0.0.0', port=5000)
 
