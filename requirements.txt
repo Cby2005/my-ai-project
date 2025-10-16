@@ -1,5 +1,7 @@
 flask
+gunicorn
 ultralytics
 opencv-python
 numpy
-gunicorn
+celery
+redis

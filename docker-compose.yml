@@ -1,20 +1,26 @@
 version: '3.8'
 
 services:
-  # 这是我们的“翻译官” - Flask Web网关
+  # 1. Redis: 我们的“任务调度中心”和“储物柜”
+  redis:
+    image: "redis:alpine"
+
+  # 2. Web: 我们的“前台接待” (Flask应用)
   web:
     build: .
     command: gunicorn --bind 0.0.0.0:5000 web_app:app
     ports:
-      - "5000:5000" # 将服务器的5000端口映射到这个容器，让公网可以访问
+      - "5000:5000" # 对公网开放5000端口
     volumes:
       - .:/app
     depends_on:
-      - ai_server
+      - redis
 
-  # 这是我们的“AI专家” - Socket服务器
-  ai_server:
+  # 3. Worker: 我们的“后台工人” (Celery应用)
+  worker:
     build: .
-    command: python ai_server.py
+    command: celery -A worker.celery_app worker --loglevel=info
     volumes:
       - .:/app
+    depends_on:
+      - redis

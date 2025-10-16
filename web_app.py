@@ -1,32 +1,40 @@
-from flask import Flask, request, render_template, send_file, jsonify
-import socket
+from flask import Flask, request, render_template, jsonify, url_for, send_file
+from celery import Celery
 import io
 
-# --- 配置 ---
+# --- Flask & Celery 配置 ---
 app = Flask(__name__)
-# Docker Compose会自动将这个服务名解析为AI服务器的IP地址
-# 在docker-compose.yml中，我们定义了AI服务器的服务名为 'ai_server'
-AI_SERVER_HOST = 'ai_server'
-AI_SERVER_PORT = 5001  # 【关键修正】确保我们联系的是AI服务器正确的端口 5001
-BUFFER_SIZE = 4096
+# 使用Redis作为Celery的消息代理和结果后端
+# 'redis' 是我们在docker-compose.yml中定义的服务名
+app.config.update(
+    CELERY_BROKER_URL='redis://redis:6379/0',
+    CELERY_RESULT_BACKEND='redis://redis:6379/0'
+)
 
+# --- 初始化Celery ---
+def make_celery(app):
+    celery = Celery(
+        app.import_name,
+        backend=app.config['CELERY_RESULT_BACKEND'],
+        broker=app.config['CELERY_BROKER_URL']
+    )
+    celery.conf.update(app.config)
+    return celery
 
-# --- 网页页面路由 ---
+celery_app = make_celery(app)
+# 我们需要从worker文件中导入真正的任务
+# 注意: 这里的 'worker.process_image' 指的是 worker.py 文件里的 process_image 任务
+process_image = celery_app.signature('worker.process_image')
+
+# --- 路由定义 ---
 @app.route('/')
 def index():
-    """向用户显示主网页 (index.html)。"""
+    """显示主网页"""
     return render_template('index.html')
 
-
-# --- “翻译”API路由，增加了更健壮的错误处理 ---
 @app.route('/detect', methods=['POST'])
 def detect():
-    """
-    处理来自网页的图片上传请求，
-    通过socket连接到后端的AI分析服务，
-    并将结果返回给前端。
-    """
-    # 1. 检查文件是否存在
+    """接收图片，派发AI分析任务，并立即返回任务ID"""
     if 'file' not in request.files:
         return jsonify({"error": "请求中没有文件部分"}), 400
     file = request.files['file']
@@ -35,54 +43,46 @@ def detect():
 
     if file:
         image_bytes = file.read()
-        # 2. 【关键升级】使用一个大的try...except块包裹所有与后端服务的通信
-        #    这样无论后端发生任何网络错误，这个网关服务本身都不会崩溃。
-        try:
-            # 创建一个新的socket，每次请求都新建一个连接，更稳定
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                # 设置一个超时时间，防止后端服务无响应时无限等待
-                s.settimeout(30)  # 30秒超时
+        # 【关键改变】调用 .delay() 将任务异步发送给Celery
+        task = process_image.delay(image_bytes)
+        # 立即返回一个包含任务ID和查询URL的JSON响应
+        return jsonify({
+            "task_id": task.id,
+            "status_url": url_for('task_status', task_id=task.id)
+        }), 202 # 202 Accepted: 表示请求已被接受，但处理尚未完成
 
-                print(f"Web Gateway: 正在连接到 AI 服务器 {AI_SERVER_HOST}:{AI_SERVER_PORT}...")
-                s.connect((AI_SERVER_HOST, AI_SERVER_PORT))
-                print("Web Gateway: 连接成功。")
+@app.route('/status/<task_id>')
+def task_status(task_id):
+    """根据任务ID查询任务状态"""
+    task = celery_app.AsyncResult(task_id)
+    if task.state == 'PENDING':
+        # 任务还在等待或正在处理
+        response = {'state': task.state, 'status': '等待中或正在处理...'}
+    elif task.state != 'FAILURE':
+        # 任务成功完成
+        response = {
+            'state': task.state,
+            'status': '处理完成',
+            'result_url': url_for('get_result', task_id=task.id)
+        }
+    else:
+        # 任务失败
+        response = {
+            'state': task.state,
+            'status': str(task.info),  # 获取异常信息
+        }
+    return jsonify(response)
 
-                # 发送图片数据
-                s.sendall(image_bytes)
-                s.shutdown(socket.SHUT_WR)  # 告知AI服务器数据已发完
-                print(f"Web Gateway: 已发送 {len(image_bytes)} 字节数据。")
-
-                # 接收AI服务器返回的结果
-                print("Web Gateway: 正在等待AI服务器返回结果...")
-                result_data = b""
-                while True:
-                    chunk = s.recv(BUFFER_SIZE)
-                    if not chunk:
-                        break
-                    result_data += chunk
-
-                if not result_data:
-                    print("Web Gateway Error: AI服务器返回了空数据。")
-                    # 返回一个JSON错误，而不是崩溃
-                    return jsonify({"error": "AI服务器返回了空数据"}), 500
-
-                print(f"Web Gateway: 已接收 {len(result_data)} 字节结果。")
-                return send_file(io.BytesIO(result_data), mimetype='image/jpeg')
-
-        # 3. 捕获所有可能的异常，并返回一个清晰的JSON错误给前端
-        except socket.timeout:
-            print("Web Gateway Error: 连接AI服务器超时。")
-            return jsonify({"error": "连接AI服务器超时，它可能正忙或已离线。"}), 504  # Gateway Timeout
-        except ConnectionRefusedError:
-            print("Web Gateway Error: AI服务器拒绝连接。")
-            return jsonify({"error": "AI服务器拒绝连接，请检查它是否正在运行。"}), 503  # Service Unavailable
-        except Exception as e:
-            # 捕获所有其他未知错误
-            print(f"Web Gateway Error: 与AI服务器通信时发生未知错误: {e}")
-            return jsonify({"error": f"与AI服务器通信时发生未知错误: {e}"}), 500  # Internal Server Error
-
+@app.route('/result/<task_id>')
+def get_result(task_id):
+    """根据任务ID获取结果图片"""
+    task = celery_app.AsyncResult(task_id)
+    if task.ready():
+        # 从Celery结果后端获取二进制图片数据
+        image_data = task.get()
+        return send_file(io.BytesIO(image_data), mimetype='image/jpeg')
+    else:
+        return jsonify({"error": "任务尚未完成"}), 404
 
 if __name__ == '__main__':
-    # 对外营业的端口是 5000
     app.run(host='0.0.0.0', port=5000)
-
