@@ -1,4 +1,4 @@
- FROM python:3.10-slim
+FROM python:3.10-slim
 
 # 第1步：设置环境变量
 ENV DEBIAN_FRONTEND=noninteractive \
