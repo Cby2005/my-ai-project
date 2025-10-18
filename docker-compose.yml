@@ -3,19 +3,31 @@ version: '3.8'
 services:
   redis:
     image: "redis:alpine"
+    restart: unless-stopped
+    command: redis-server --appendonly yes
 
   web:
     build: .
-    command: gunicorn --bind 0.0.0.0:5000 web_app:app
+    command: >
+      sh -c "sleep 5 && 
+      gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 120 --access-logfile - web_app:app"
     ports:
       - "5000:5000"
-    # 移除 volumes 配置
     depends_on:
       - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   worker:
     build: .
-    command: celery -A worker.celery_app worker --loglevel=info
-    # 移除 volumes 配置
+    command: >
+      sh -c "sleep 10 && 
+      celery -A worker.celery_app worker --loglevel=info"
     depends_on:
       - redis
+    restart: unless-stopped
