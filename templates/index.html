@@ -3,13 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 智能图像分析 (业务逻辑版)</title>
+    <title>AI 智能图像分析 (交互升级版)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .loader { border-top-color: #3498db; animation: spin 1s linear infinite; }
+        .loader { border-top-color: #3b82f6; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .fade-in { animation: fadeIn 0.5s ease-in-out; }
         @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        /* 拖拽区域高亮样式 */
+        .drop-zone-active {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
     </style>
 </head>
 <body class="bg-gray-100 font-sans flex items-center justify-center min-h-screen">
@@ -17,19 +22,32 @@
     <div class="container mx-auto p-4 md:p-8 max-w-6xl">
         <div class="bg-white rounded-2xl shadow-2xl overflow-hidden">
 
-            <div class="p-6 md:p-8 bg-green-600 text-white text-center">
-                <h1 class="text-3xl md:text-4xl font-bold">智能量化分析平台</h1>
-                <p class="mt-2 text-green-200">不仅识别物体，更能提供量化统计数据</p>
+            <div class="p-6 md:p-8 bg-blue-600 text-white text-center">
+                <h1 class="text-3xl md:text-4xl font-bold">智能量化分析平台 v2.0</h1>
+                <p class="mt-2 text-blue-200">不仅识别物体，更能提供量化统计数据</p>
             </div>
 
             <div class="p-6 md:p-8">
-                <!-- 上传区域 -->
-                <div class="text-center">
-                    <label for="image-upload" class="cursor-pointer inline-block bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">
-                        选择一张图片进行分析
+                <!-- 【升级】上传区域：现在支持拖拽 -->
+                <div id="drop-zone" class="border-4 border-dashed border-gray-300 rounded-2xl p-8 text-center transition-all duration-300">
+                    <label for="image-upload" class="cursor-pointer inline-block bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-transform transform hover:scale-105">
+                        选择一张图片
                     </label>
                     <input id="image-upload" type="file" class="hidden" accept="image/*">
-                    <p id="file-name" class="mt-4 text-sm text-gray-500">尚未选择文件</p>
+                    <p class="mt-4 text-gray-500">或将图片文件拖拽至此</p>
+                    <p class="text-sm text-gray-400 mt-1">也支持直接粘贴 (Ctrl+V)</p>
+                    <p id="file-name" class="mt-4 text-sm text-gray-600 font-medium">尚未选择文件</p>
+                </div>
+
+                <!-- 【新增】示例图片区域 -->
+                <div class="mt-8">
+                    <h3 class="text-lg font-semibold text-gray-700 text-center mb-4">或者，尝试用下面的示例图片：</h3>
+                    <div id="example-images" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <img src="https://images.unsplash.com/photo-1598823992013-146b9a888b0a?q=80&w=800" class="cursor-pointer rounded-lg shadow-md hover:shadow-xl transform hover:-translate-y-1 transition-all" alt="示例图片1：街道">
+                        <img src="https://images.unsplash.com/photo-1543466835-00a7907e9de1?q=80&w=800" class="cursor-pointer rounded-lg shadow-md hover:shadow-xl transform hover:-translate-y-1 transition-all" alt="示例图片2：小狗">
+                        <img src="https://images.unsplash.com/photo-1570126618953-add788b5954a?q=80&w=800" class="cursor-pointer rounded-lg shadow-md hover:shadow-xl transform hover:-translate-y-1 transition-all" alt="示例图片3：办公室">
+                        <img src="https://images.unsplash.com/photo-1506619216599-9d98d8929dfd?q=80&w=800" class="cursor-pointer rounded-lg shadow-md hover:shadow-xl transform hover:-translate-y-1 transition-all" alt="示例图片4：水果">
+                    </div>
                 </div>
 
                 <!-- 状态与结果展示 -->
@@ -51,7 +69,7 @@
                             <img id="result-image" src="" alt="分析结果" class="max-w-full h-auto rounded-lg hidden">
                         </div>
                     </div>
-                    <!-- 【新增】分析统计数据 -->
+                    <!-- 分析统计数据 -->
                     <div class="md:col-span-1 bg-gray-50 p-4 rounded-lg shadow-inner">
                          <h3 class="text-lg font-semibold text-gray-700 mb-3 border-b pb-2">量化统计报告</h3>
                          <div id="analysis-data" class="text-left space-y-2">
@@ -76,8 +94,47 @@
         const resultImage = document.getElementById('result-image');
         const analysisDataContainer = document.getElementById('analysis-data');
         const errorMessage = document.getElementById('error-message');
+        const dropZone = document.getElementById('drop-zone');
+        const exampleImagesContainer = document.getElementById('example-images');
 
         let pollingInterval;
+
+        // 【核心函数】: 统一处理图片分析流程
+        function startAnalysis(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                showError('请提供有效的图片文件。');
+                return;
+            }
+
+            resetUI();
+            fileNameDisplay.textContent = file.name || '来自剪贴板或示例的图片';
+
+            const reader = new FileReader();
+            reader.onload = (e) => { previewImage.src = e.target.result; };
+            reader.readAsDataURL(file);
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            statusArea.classList.remove('hidden');
+            statusText.textContent = '正在提交任务到后台队列...';
+
+            fetch('/detect', { method: 'POST', body: formData })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.error || `服务器错误: ${response.status}`) });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    statusText.textContent = '任务已提交！正在后台处理...';
+                    loader.classList.remove('hidden');
+                    pollTaskStatus(data.status_url);
+                })
+                .catch(err => {
+                    showError(`提交任务失败: ${err.message}`);
+                });
+        }
 
         function pollTaskStatus(statusUrl) {
             pollingInterval = setInterval(() => {
@@ -100,18 +157,16 @@
                         clearInterval(pollingInterval);
                         showError(`轮询状态失败: ${err.message}`);
                     });
-            }, 2000); // 每2秒查询一次
+            }, 2000);
         }
 
         function displayResult(resultUrl) {
             fetch(resultUrl)
                 .then(response => response.json())
                 .then(report => {
-                    // 1. 显示结果图片 (通过Base64数据)
                     resultImage.src = `data:image/jpeg;base64,${report.image_data}`;
 
-                    // 2. 动态生成并显示统计数据
-                    analysisDataContainer.innerHTML = ''; // 清空旧数据
+                    analysisDataContainer.innerHTML = '';
                     const data = report.analysis_data;
 
                     const totalP = document.createElement('p');
@@ -137,7 +192,6 @@
                     }
                     analysisDataContainer.appendChild(ul);
 
-                    // 3. 控制UI元素的显示
                     statusArea.classList.add('hidden');
                     resultArea.classList.remove('hidden');
                     resultImage.classList.remove('hidden', 'fade-in');
@@ -162,46 +216,60 @@
             analysisDataContainer.innerHTML = '';
         }
 
+        // --- 事件监听 ---
+
+        // 1. 文件选择按钮
         imageUpload.addEventListener('change', (event) => {
             const file = event.target.files[0];
-            if (!file) return;
-
-            resetUI();
-
-            fileNameDisplay.textContent = file.name;
-
-            const reader = new FileReader();
-            reader.onload = (e) => { previewImage.src = e.target.result; };
-            reader.readAsDataURL(file);
-
-            const formData = new FormData();
-            formData.append('file', file);
-
-            statusArea.classList.remove('hidden');
-            statusText.textContent = '正在提交任务到后台队列...';
-
-            fetch('/detect', { method: 'POST', body: formData })
-                .then(response => {
-                    if (!response.ok) {
-                        // 尝试解析JSON错误体
-                        return response.json().then(err => {
-                            throw new Error(err.error || `服务器返回错误: ${response.status}`)
-                        }).catch(() => {
-                            // 如果JSON解析失败，返回文本
-                            throw new Error(`服务器返回错误: ${response.status} ${response.statusText}`);
-                        });
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    statusText.textContent = '任务已提交！正在后台处理...';
-                    loader.classList.remove('hidden');
-                    pollTaskStatus(data.status_url);
-                })
-                .catch(err => {
-                    showError(`提交任务失败: ${err.message}`);
-                });
+            if (file) {
+                startAnalysis(file);
+            }
         });
+
+        // 2. 拖拽区域
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            }, false);
+        });
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('drop-zone-active'), false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('drop-zone-active'), false);
+        });
+        dropZone.addEventListener('drop', (e) => {
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                startAnalysis(file);
+            }
+        }, false);
+
+        // 3. 粘贴事件
+        window.addEventListener('paste', e => {
+            const file = e.clipboardData.files[0];
+            if (file) {
+                startAnalysis(file);
+            }
+        });
+
+        // 4. 示例图片点击事件
+        exampleImagesContainer.addEventListener('click', (e) => {
+            if (e.target.tagName === 'IMG') {
+                const imageUrl = e.target.src;
+                fileNameDisplay.textContent = '正在加载示例图片...';
+                // 将图片URL转换为File对象
+                fetch(imageUrl)
+                    .then(res => res.blob())
+                    .then(blob => {
+                        const file = new File([blob], `example_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                        startAnalysis(file);
+                    })
+                    .catch(err => showError(`加载示例图片失败: ${err.message}`));
+            }
+        });
+
     </script>
 </body>
 </html>
