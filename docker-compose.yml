@@ -1,26 +1,21 @@
 version: '3.8'
 
 services:
-  # 1. Redis: 我们的“任务调度中心”和“储物柜”
   redis:
     image: "redis:alpine"
 
-  # 2. Web: 我们的“前台接待” (Flask应用)
   web:
     build: .
     command: gunicorn --bind 0.0.0.0:5000 web_app:app
     ports:
-      - "5000:5000" # 对公网开放5000端口
-    volumes:
-      - .:/app
+      - "5000:5000"
+    # 移除 volumes 配置
     depends_on:
       - redis
 
-  # 3. Worker: 我们的“后台工人” (Celery应用)
   worker:
     build: .
     command: celery -A worker.celery_app worker --loglevel=info
-    volumes:
-      - .:/app
+    # 移除 volumes 配置
     depends_on:
       - redis
