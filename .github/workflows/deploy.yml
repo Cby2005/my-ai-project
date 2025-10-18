@@ -3,7 +3,7 @@ name: Deploy to Cloud Server
 on:
   push:
     branches:
-      - master # 当 master 分-支有代码推送时触发
+      - master # 当 master 分支有代码推送时触发
 
 jobs:
   deploy:
@@ -20,8 +20,11 @@ jobs:
             echo "Fetching latest code from GitHub..."
             git fetch --all
             git reset --hard origin/master
-            echo "Starting deployment..."
+            echo "Stopping old services if they exist..."
+            docker-compose down
+            echo "Starting new deployment..."
             docker-compose up --build -d
             echo "Cleaning up old images..."
             docker system prune -a -f
             echo "Deployment successful!"
+
