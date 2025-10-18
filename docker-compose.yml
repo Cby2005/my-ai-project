@@ -1,33 +1,25 @@
-version: '3.8'
-
 services:
+  # 1. Redis: 我们的“任务调度中心”和“储物柜”
   redis:
     image: "redis:alpine"
-    restart: unless-stopped
-    command: redis-server --appendonly yes
 
+  # 2. Web: 我们的“前台接待” (Flask应用)
   web:
     build: .
-    command: >
-      sh -c "sleep 5 && 
-      gunicorn --bind 0.0.0.0:5000 --workers 2 --timeout 120 --access-logfile - web_app:app"
+    command: gunicorn --bind 0.0.0.0:5000 web_app:app
     ports:
-      - "5000:5000"
+      - "5000:5000" # 对公网开放5000端口
+    volumes:
+      - .:/app
     depends_on:
       - redis
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
+  # 3. Worker: 我们的“后台工人” (Celery应用)
   worker:
     build: .
-    command: >
-      sh -c "sleep 10 && 
-      celery -A worker.celery_app worker --loglevel=info"
+    command: celery -A worker.celery_app worker --loglevel=info
+    volumes:
+      - .:/app
     depends_on:
       - redis
-    restart: unless-stopped
+
