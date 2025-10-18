@@ -17,7 +17,9 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd ~/my-ai-project
-            git pull
+            echo "Fetching latest code from GitHub..."
+            git fetch --all
+            git reset --hard origin/master
             echo "Starting deployment..."
             docker-compose up --build -d
             echo "Cleaning up old images..."
