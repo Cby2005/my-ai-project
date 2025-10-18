@@ -1,39 +1,36 @@
+# 第1步：选择基础环境
 FROM python:3.10-slim
 
-# 第1步：设置环境变量
-ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1
+# 第2步：【终极网络修复】用阿里云镜像源强制覆盖系统软件源
+# 这个命令会直接重写apt的配置文件，确保100%使用国内源
+RUN echo "deb http://mirrors.aliyun.com/debian/ trixie main contrib non-free" > /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian/ trixie-updates main contrib non-free" >> /etc/apt/sources.list && \
+    echo "deb http://mirrors.aliyun.com/debian-security trixie-security main contrib non-free" >> /etc/apt/sources.list
 
-# 第2步：针对 trixie (Debian 13) 配置正确的阿里云镜像源
-RUN echo "配置 Trixie (Debian 13) 阿里云镜像源..." && \
-    # 备份原始源文件
-    cp /etc/apt/sources.list /etc/apt/sources.list.bak && \
-    # 清空并写入正确的 trixie 源
-    echo "deb http://mirrors.aliyun.com/debian/ trixie main" > /etc/apt/sources.list && \
-    echo "deb http://mirrors.aliyun.com/debian/ trixie-updates main" >> /etc/apt/sources.list && \
-    echo "deb http://mirrors.aliyun.com/debian-security trixie-security main" >> /etc/apt/sources.list
-
-# 第3步：安装系统依赖（增加超时和重试参数）
-RUN echo "更新包列表并安装依赖..." && \
-    apt-get update -o Acquire::http::Timeout=30 -o Acquire::Retries=3 && \
-    apt-get install -y --no-install-recommends \
+# 第3步：安装所有已知的系统依赖 (现在会飞快)
+RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+    && rm -rf /var/lib/apt/lists/*
 
+# 第4步：配置pip国内加速源
+RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 第5步：创建工作目录
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# 第6步：复制并安装Python依赖
+COPY requirements.txt requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
+# 第7步：复制项目所有文件
 COPY . .
 
-# 跳过预下载模型以加速构建（运行时自动下载）
-RUN echo "跳过预下载模型，将在运行时自动下载"
+# 第8步：预下载模型
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
 
-ENV ULTRALYTICS_HOME=/app/models
+# 第9步：声明服务端口
 EXPOSE 5000
 
+# 第10步：定义启动命令
 CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:5000", "web_app:app"]
