@@ -1,6 +1,5 @@
 # 导入 socket 库，用于网络通信
 import socket
-
 # --- 配置区 ---
 # !! 重要 !!
 # 1. 在你的电脑上本地测试服务器时, 请将 SERVER_HOST 设置为 '127.0.0.1'
@@ -10,11 +9,9 @@ SERVER_PORT = 5000
 IMAGE_PATH = 'test_image.jpg'  # 要发送进行分析的图片文件名
 RESULT_PATH = 'result_from_server.jpg'  # 从服务器接收到的结果，要保存的文件名
 BUFFER_SIZE = 4096  # 每次从网络连接中读取数据的缓冲区大小
-
 # --- 创建客户端并连接 ---
 # 1. 创建一个 TCP/IP socket 对象
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
 try:
     # 2. 连接到服务器
     print(f"正在连接到服务器 {SERVER_HOST}:{SERVER_PORT}...")

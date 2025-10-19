@@ -1,13 +1,10 @@
 from flask import Flask, request, render_template, jsonify, url_for
 from celery import Celery
-
-# --- Flask & Celery 配置 (无变化) ---
 app = Flask(__name__)
 app.config.update(
     CELERY_BROKER_URL='redis://redis:6379/0',
     CELERY_RESULT_BACKEND='redis://redis:6379/0'
 )
-
 def make_celery(app):
     celery = Celery(
         app.import_name,
@@ -19,12 +16,10 @@ def make_celery(app):
 
 celery_app = make_celery(app)
 process_image = celery_app.signature('worker.process_image')
-
 # --- 路由定义 ---
 @app.route('/')
 def index():
     return render_template('index.html')
-
 @app.route('/detect', methods=['POST'])
 def detect():
     if 'file' not in request.files:
@@ -40,7 +35,6 @@ def detect():
             "task_id": task.id,
             "status_url": url_for('task_status', task_id=task.id)
         }), 202
-
 @app.route('/status/<task_id>')
 def task_status(task_id):
     task = celery_app.AsyncResult(task_id)
@@ -49,7 +43,6 @@ def task_status(task_id):
         # 如果成功，直接在状态查询里就返回结果URL
         response['result_url'] = url_for('get_result', task_id=task.id)
     return jsonify(response)
-
 @app.route('/result/<task_id>')
 def get_result(task_id):
     """根据任务ID获取完整的JSON分析报告"""
@@ -61,7 +54,6 @@ def get_result(task_id):
         return jsonify(analysis_report)
     else:
         return jsonify({"error": "任务尚未完成或已失败"}), 404
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
 

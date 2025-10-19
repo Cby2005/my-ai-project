@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 import base64  # 导入base64库，用于将图片数据编码成文本
-
 # --- Celery & AI 模型初始化 ---
 # 'redis' 是我们在docker-compose.yml中定义的服务名
 celery_app = Celery(
@@ -11,19 +10,12 @@ celery_app = Celery(
     broker='redis://redis:6379/0',
     backend='redis://redis:6379/0'
 )
-
 print("Worker: 正在加载YOLOv8模型...")
 model = YOLO('yolov8n.pt')
 print("Worker: 模型加载完成，准备接收任务！")
-
-
 # --- 定义AI分析任务 ---
 @celery_app.task(name='worker.process_image')
 def process_image(image_bytes):
-    """
-    这是一个Celery任务，它接收二进制图片数据，进行AI分析，
-    并返回一个包含“分析报告”的JSON对象。
-    """
     print(f"Worker: 接收到新任务，数据大小 {len(image_bytes)} 字节")
     try:
         # --- 核心AI逻辑 ---
@@ -63,7 +55,6 @@ def process_image(image_bytes):
                 "class_counts": class_counts
             }
         }
-
         return analysis_report
 
     except Exception as e:
