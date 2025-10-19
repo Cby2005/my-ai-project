@@ -3,7 +3,7 @@ name: Deploy to Cloud Server
 on:
   push:
     branches:
-      - master # 当 master 分支有代码推送时触发
+      - master
 
 jobs:
   deploy:
@@ -17,14 +17,37 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             cd ~/my-ai-project
-            echo "Fetching latest code from GitHub..."
+            
+            echo "Pulling latest code..."
             git fetch --all
             git reset --hard origin/master
-            echo "Stopping old services if they exist..."
+            
+            echo "Forcing Docker to use latest code..."
+            # 获取最新提交的hash作为构建参数，确保缓存失效
+            LATEST_COMMIT=$(git rev-parse HEAD)
+            
+            echo "Rebuilding services..."
+            docker-compose build --build-arg COMMIT_HASH=$LATEST_COMMIT --no-cache
+            
+            echo "Restarting services..."
             docker-compose down
-            echo "Starting new deployment..."
-            docker-compose up --build -d
+            docker-compose up -d
+            
+            echo "Running health check..."
+            # 等待服务启动
+            sleep 15
+            docker-compose ps
+            
+            # 检查服务是否正常响应
+            if curl -f http://localhost:3000/health > /dev/null 2>&1; then
+              echo "✅ Service is healthy"
+            else
+              echo "❌ Service health check failed"
+              docker-compose logs
+              exit 1
+            fi
+            
             echo "Cleaning up old images..."
-            docker system prune -a -f
-            echo "Deployment successful!"
-
+            docker image prune -f
+            
+            echo "🚀 Deployment completed successfully!"
