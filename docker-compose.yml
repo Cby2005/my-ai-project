@@ -13,10 +13,6 @@ services:
     command: gunicorn --bind 0.0.0.0:5000 web_app:app
     ports:
       - "5000:5000"
-    # 【关键优化】将服务器上的代码目录挂载到容器内部
-    # 这样修改代码后，只需重启容器，无需重新构建镜像
-    volumes:
-      - .:/app
     depends_on:
       - redis
     restart: unless-stopped
@@ -25,10 +21,9 @@ services:
   worker:
     build: .
     command: celery -A worker.celery_app worker --loglevel=info
-    # 【关键优化】同样挂载代码目录
-    volumes:
-      - .:/app
     depends_on:
       - redis
     restart: unless-stopped
+
+
 
