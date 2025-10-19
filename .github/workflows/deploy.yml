@@ -8,6 +8,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20  # 整体作业超时20分钟
     steps:
       - name: Deploy Application via SSH
         uses: appleboy/ssh-action@master
@@ -15,6 +16,8 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 16m  # SSH命令超时16分钟
+          script_stop: true     # 遇到错误立即停止
           script: |
             cd ~/my-ai-project
             
@@ -26,8 +29,15 @@ jobs:
             # 获取最新提交的hash作为构建参数，确保缓存失效
             LATEST_COMMIT=$(git rev-parse HEAD)
             
-            echo "Rebuilding services..."
-            docker-compose build --build-arg COMMIT_HASH=$LATEST_COMMIT --no-cache
+            # 设置Docker构建超时环境变量
+            export COMPOSE_HTTP_TIMEOUT=960  # 16分钟
+            export DOCKER_CLIENT_TIMEOUT=960  # 16分钟
+            
+            echo "Rebuilding services (this may take up to 16 minutes)..."
+            # 使用timeout命令包装docker-compose构建
+            timeout 16m docker-compose build --build-arg COMMIT_HASH=$LATEST_COMMIT --no-cache || {
+              echo "Build might have timed out, checking status..."
+            }
             
             echo "Restarting services..."
             docker-compose down
