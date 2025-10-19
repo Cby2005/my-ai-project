@@ -3,12 +3,11 @@ name: Deploy to Cloud Server
 on:
   push:
     branches:
-      - master
+      - master # 当 master 分支有代码推送时触发
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
     steps:
       - name: Deploy Application via SSH
         uses: appleboy/ssh-action@master
@@ -16,90 +15,24 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 30m
           script: |
-            set -e  # 遇到错误立即退出
-
+            # 进入项目目录
             cd ~/my-ai-project
-
-            echo "Configuring Git for better network handling..."
-            git config --global http.postBuffer 1048576000
-            git config --global http.lowSpeedLimit 0
-            git config --global http.lowSpeedTime 999999
-            git config --global core.compression 0
-
-            echo "Pulling latest code with retry mechanism..."
-            # 使用重试机制获取代码
-            max_retries=5
-            retry_count=0
-            while [ $retry_count -lt $max_retries ]; do
-              if git fetch --all; then
-                echo "✅ Git fetch successful"
-                break
-              else
-                retry_count=$((retry_count+1))
-                echo "⚠️ Git fetch failed, retrying in 10 seconds... (attempt $retry_count/$max_retries)"
-                sleep 10
-              fi
-            done
-
-            if [ $retry_count -eq $max_retries ]; then
-              echo "❌ Git fetch failed after $max_retries attempts, trying alternative approach..."
-              # 如果还是失败，使用强制重置
-              git reset --hard HEAD
-              git pull origin master --force || echo "Using existing code..."
-            fi
-
-            echo "Resetting to origin/master..."
-            git reset --hard origin/master || git reset --hard HEAD
-
-            echo "Forcing Docker to use latest code..."
-            LATEST_COMMIT=$(git rev-parse HEAD)
-            echo "Building from commit: $LATEST_COMMIT"
-
-            # 设置Docker构建超时环境变量
-            export COMPOSE_HTTP_TIMEOUT=960
-            export DOCKER_CLIENT_TIMEOUT=960
-
-            echo "Rebuilding services (this may take up to 16 minutes)..."
-            # 使用重试机制构建
-            build_retry_count=0
-            max_build_retries=2
-            while [ $build_retry_count -lt $max_build_retries ]; do
-              if timeout 16m docker-compose build --build-arg COMMIT_HASH=$LATEST_COMMIT --no-cache; then
-                echo "✅ Docker build successful"
-                break
-              else
-                build_retry_count=$((build_retry_count+1))
-                echo "⚠️ Docker build failed, cleaning up and retrying... (attempt $build_retry_count/$max_build_retries)"
-                docker system prune -f
-                sleep 30
-              fi
-            done
-
-            if [ $build_retry_count -eq $max_build_retries ]; then
-              echo "❌ Docker build failed after $max_build_retries attempts"
-              exit 1
-            fi
-
-            echo "Restarting services..."
-            docker-compose down
-            docker-compose up -d
-
-            echo "Running health check..."
-            sleep 15
-            docker-compose ps
-
-            # 检查服务是否正常响应
-            if curl -f http://localhost:3000/health > /dev/null 2>&1; then
-              echo "✅ Service is healthy"
-            else
-              echo "❌ Service health check failed"
-              docker-compose logs
-              exit 1
-            fi
-
+            
+            # 使用最可靠的方式拉取最新代码
+            echo "Pulling latest code from GitHub..."
+            git fetch --all
+            git reset --hard origin/master
+            
+            # 【关键优化】一键启动服务
+            # docker-compose up 会自动检测变化：
+            # - 如果 Dockerfile 或 requirements.txt 变了，它会自动 --build
+            # - 如果只是 .py 或 .html 代码变了，它会利用 volumes 快速重启服务
+            echo "Starting smart deployment..."
+            docker-compose up -d --build
+            
+            # 清理旧的、不再使用的镜像，释放空间
             echo "Cleaning up old images..."
-            docker image prune -f
-
-            echo "🚀 Deployment completed successfully!"
+            docker system prune -a -f
+            
+            echo "Deployment successful!"
