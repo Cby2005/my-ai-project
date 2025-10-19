@@ -8,7 +8,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - name: Deploy Application via SSH
         uses: appleboy/ssh-action@master
@@ -16,7 +16,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 16m
+          command_timeout: 30m
           script: |
             set -e  # 遇到错误立即退出
 
