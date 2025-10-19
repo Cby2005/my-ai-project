@@ -19,15 +19,15 @@ jobs:
           command_timeout: 16m
           script: |
             set -e  # 遇到错误立即退出
-            
+
             cd ~/my-ai-project
-            
+
             echo "Configuring Git for better network handling..."
             git config --global http.postBuffer 1048576000
             git config --global http.lowSpeedLimit 0
             git config --global http.lowSpeedTime 999999
             git config --global core.compression 0
-            
+
             echo "Pulling latest code with retry mechanism..."
             # 使用重试机制获取代码
             max_retries=5
@@ -42,25 +42,25 @@ jobs:
                 sleep 10
               fi
             done
-            
+
             if [ $retry_count -eq $max_retries ]; then
               echo "❌ Git fetch failed after $max_retries attempts, trying alternative approach..."
               # 如果还是失败，使用强制重置
               git reset --hard HEAD
               git pull origin master --force || echo "Using existing code..."
             fi
-            
+
             echo "Resetting to origin/master..."
             git reset --hard origin/master || git reset --hard HEAD
-            
+
             echo "Forcing Docker to use latest code..."
             LATEST_COMMIT=$(git rev-parse HEAD)
             echo "Building from commit: $LATEST_COMMIT"
-            
+
             # 设置Docker构建超时环境变量
             export COMPOSE_HTTP_TIMEOUT=960
             export DOCKER_CLIENT_TIMEOUT=960
-            
+
             echo "Rebuilding services (this may take up to 16 minutes)..."
             # 使用重试机制构建
             build_retry_count=0
@@ -76,20 +76,20 @@ jobs:
                 sleep 30
               fi
             done
-            
+
             if [ $build_retry_count -eq $max_build_retries ]; then
               echo "❌ Docker build failed after $max_build_retries attempts"
               exit 1
             fi
-            
+
             echo "Restarting services..."
             docker-compose down
             docker-compose up -d
-            
+
             echo "Running health check..."
             sleep 15
             docker-compose ps
-            
+
             # 检查服务是否正常响应
             if curl -f http://localhost:3000/health > /dev/null 2>&1; then
               echo "✅ Service is healthy"
@@ -98,8 +98,8 @@ jobs:
               docker-compose logs
               exit 1
             fi
-            
+
             echo "Cleaning up old images..."
             docker image prune -f
-            
+
             echo "🚀 Deployment completed successfully!"
