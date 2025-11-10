@@ -1,12 +1,16 @@
 version: '3.8'
 
-# 1. 在顶层定义两个卷
+# (新) 在顶层定义两个卷，用于共享文件
 volumes:
   uploads_volume:
   results_volume:
 
 services:
-  # ... (您的 redis 服务不变) ...
+  # 1. Redis: 任务调度中心与结果仓库 (这个服务被意外删除了)
+  redis:
+    image: "redis:alpine"
+    restart: unless-stopped
+    command: redis-server --appendonly yes
 
   # 2. Web: 前台接待 (Flask应用)
   web:
@@ -17,19 +21,19 @@ services:
     depends_on:
       - redis
     restart: unless-stopped
-    # 3. 挂载卷到 web 服务
+    # (新) 挂载卷到 web 服务
     volumes:
       - uploads_volume:/app/uploads
       - results_volume:/app/static/results
 
-  # 4. Worker: 后台AI专家 (Celery应用)
+  # 3. Worker: 后台AI专家 (Celery应用)
   worker:
     build: .
     command: celery -A worker.celery_app worker --loglevel=info
     depends_on:
       - redis
     restart: unless-stopped
-    # 5. 挂载同样的卷到 worker 服务
+    # (新) 挂载同样的卷到 worker 服务
     volumes:
       - uploads_volume:/app/uploads
       - results_volume:/app/static/results
