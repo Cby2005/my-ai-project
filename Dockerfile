@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 第7步：复制项目所有文件
 COPY . .
 # 第8步：预下载模型
-RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+RUN python -c "from ultralytics import YOLO; YOLO('best.pt')"
 # 第9步：声明服务端口
 EXPOSE 5000
 # 第10步：定义启动命令
