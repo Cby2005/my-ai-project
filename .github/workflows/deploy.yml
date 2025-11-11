@@ -3,7 +3,7 @@ name: Deploy to Cloud Server
 on:
   push:
     branches:
-      - master # 当 master 分支有代码推送时触发
+      - master
 
 jobs:
   deploy:
@@ -15,22 +15,28 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          timeout: 60m  # <-- 【新增这一行】将超时延长到 60 分钟
+          timeout: 60m
           script: |
-            # 进入项目目录
+            # 1. 进入项目目录
             cd ~/my-ai-project
             
-            # 使用最可靠的方式拉取最新代码
+            # 2. 拉取最新代码
             echo "Pulling latest code from GitHub..."
             git fetch --all
             git reset --hard origin/master
             
-            # 【关键优化】一键启动服务
+            # 3. 【!!! 关键修复 !!!】
+            #    从 GitHub Secrets 创建 .env 文件
+            echo "Creating .env file..."
+            echo "ROBOFLOW_API_KEY=${{ secrets.ROBOFLOW_API_KEY }}" > .env
+            
+            # 4. 启动服务 (Gunicorn 超时修复也应在这里)
             echo "Starting smart deployment..."
+            # (建议: 确保你的 docker-compose.yml 里的 gunicorn 命令有 --timeout 300)
             docker-compose up -d --build
             
-            # 清理旧的、不再使用的镜像，释放空间
+            # 5. 【优化】使用更温和的清理命令
             echo "Cleaning up old images..."
-            docker system prune -a -f
+            docker image prune -f
             
             echo "Deployment successful!"
