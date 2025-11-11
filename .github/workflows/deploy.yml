@@ -15,6 +15,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          timeout: 60m  # <-- 【新增这一行】将超时延长到 60 分钟
           script: |
             # 进入项目目录
             cd ~/my-ai-project
@@ -25,9 +26,6 @@ jobs:
             git reset --hard origin/master
             
             # 【关键优化】一键启动服务
-            # docker-compose up 会自动检测变化：
-            # - 如果 Dockerfile 或 requirements.txt 变了，它会自动 --build
-            # - 如果只是 .py 或 .html 代码变了，它会利用 volumes 快速重启服务
             echo "Starting smart deployment..."
             docker-compose up -d --build
             
