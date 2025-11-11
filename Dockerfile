@@ -20,7 +20,7 @@ WORKDIR /app
 
 # 第6步：复制并安装Python依赖
 COPY requirements.txt requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --timeout 100 --retries 5 --no-cache-dir -r requirements.txt
 
 # 第7步：复制项目所有文件
 COPY . .
