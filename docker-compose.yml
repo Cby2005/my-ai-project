@@ -10,9 +10,12 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
 
+    # docker-compose.yml (web service)
   web:
     build: .
-    command: gunicorn --bind 0.0.0.0:5000 web_app:app
+      # (修改) 增加 --timeout 300
+    command: gunicorn --bind 0.0.0.0:5000 --timeout 300 web_app:app
+      # ... 其他配置
     ports:
       - "5000:5000"
     depends_on:
