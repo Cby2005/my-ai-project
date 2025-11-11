@@ -1,0 +1,6 @@
+# 忽略 Python 缓存
+__pycache__/
+*.pyc
+
+# 忽略所有 .env 文件，保护您的 API 密钥
+.env
