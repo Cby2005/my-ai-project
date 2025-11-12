@@ -67,6 +67,7 @@ def process_image(image_bytes):
 
 
 # --- (新) 定义AI分析任务 (视频) ---
+# --- (新) 定义AI分析任务 (视频) ---
 @celery_app.task(name='worker.process_video')
 def process_video(video_path):
     print(f"Worker: 接收到新视频任务，路径 {video_path}")
@@ -75,31 +76,36 @@ def process_video(video_path):
         RESULT_DIR = "/app/static/results"
         os.makedirs(RESULT_DIR, exist_ok=True)
 
-        # 创建一个安全的结果文件名
+        # 原始文件名 (例如: "test_video.mp4")
         base_filename = os.path.basename(video_path)
-        result_filename = f"{os.path.splitext(base_filename)[0]}_result.mp4"
 
-        # --- 核心AI逻辑 (处理视频) ---
-        # 使用 model.track() 进行目标跟踪，效果更好
-        # YOLOv8 会自动处理视频的读写
-        # 'project' 定义保存的根目录
-        # 'name' 定义保存的文件名
+        # (修改) 'name' 应该是 "run" 的名称，不应包含 .mp4
+        # (例如: "test_video_result")
+        result_run_name = f"{os.path.splitext(base_filename)[0]}_result"
+
         print(f"Worker: 开始处理视频: {base_filename}")
-        model.track(video_path, save=True, project=RESULT_DIR, name=result_filename, exist_ok=True)
 
-        result_save_path = os.path.join(RESULT_DIR, result_filename)
-        print(f"Worker: 视频处理完成，保存在 {result_save_path}")
+        # (修改) 'name' 参数现在使用不带 .mp4 的 'result_run_name'
+        model.track(video_path, save=True, project=RESULT_DIR, name=result_run_name, exist_ok=True)
+
+        # YOLO 会将视频保存在: <project>/<name>/<base_filename>
+        # (例如: /app/static/results/test_video_result/test_video.mp4)
+
+        # (修改) 我们的URL必须指向YOLO实际保存文件的位置
+        result_url_path = f"/static/results/{result_run_name}/{base_filename}"
+
+        # 打印新的保存路径
+        print(f"Worker: 视频处理完成，保存在 {os.path.join(RESULT_DIR, result_run_name, base_filename)}")
 
         # 清理已处理的上传文件 (从 /app/uploads 删除)
         os.remove(video_path)
 
         # 3. 构建最终的“分析报告”
-        # (注意：从 model.track() 统计物体比较复杂，这里暂时简化)
         analysis_report = {
-            "is_video": True,  # (新) 告诉前端这是视频
-            "video_url": f"/static/results/{result_filename}",  # (新) 返回视频的URL
+            "is_video": True,
+            "video_url": result_url_path,  # (修改) 返回正确的URL
             "analysis_data": {
-                "total_objects": "N/A (视频处理)",  # 您可以后续实现此统计
+                "total_objects": "N/A (视频处理)",
                 "class_counts": {}
             }
         }
