@@ -14,8 +14,6 @@ celery_app = Celery(
 )
 
 print("Worker: 正在加载自定义模型...")
-# 注意：这里我们加载您在 Roboflow 上训练的新模型
-# 请确保您已经下载了 best.pt 并将其与此文件放在同一目录
 model = YOLO('best.pt')
 print("Worker: 模型加载完成，准备接收任务！")
 
