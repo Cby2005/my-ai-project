@@ -1,6 +1,7 @@
 flask
 gunicorn
+ultralytics
+opencv-python
+numpy
 celery
 redis
-inference-sdk  # (新) Roboflow API 库
-httpx[http2] # (新) 添加这一行
