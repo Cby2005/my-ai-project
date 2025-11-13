@@ -1,6 +1,8 @@
+# (假设您已安装 Docker)
 import os
-import uuid  # <-- 新增导入
-from flask import Flask, request, render_template, jsonify, url_for
+import uuid
+# 1. 在这里添加 send_from_directory
+from flask import Flask, request, render_template, jsonify, url_for, send_from_directory
 from celery import Celery
 from werkzeug.utils import secure_filename
 
@@ -12,6 +14,8 @@ app.config.update(
 
 # 共享卷的路径，对应 docker-compose.yml
 UPLOAD_FOLDER = '/app/uploads'
+# (新) 我们需要知道静态文件夹的绝对路径
+STATIC_FOLDER = '/app/static'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
@@ -38,7 +42,6 @@ def index():
     return render_template('index.html')
 
 
-# --- 这是修改后的 /detect 路由 ---
 @app.route('/detect', methods=['POST'])
 def detect():
     if 'file' not in request.files:
@@ -49,42 +52,28 @@ def detect():
 
     if file:
 
-        # --- 这是【修改后】的逻辑 ---
-
-        # 1. 获取原始文件名 (例如: "创建水果视频.webm")
+        # --- 这是【UUID 修复】---
         original_filename = file.filename
-
-        # 2. 安全地获取文件扩展名 (例如: ".webm")
-        # os.path.splitext 会把 "创建水果视频.webm" 分割为 ("创建水果视频", ".webm")
         _, ext = os.path.splitext(original_filename)
 
-        # 3. 如果没有扩展名，则拒绝
         if not ext:
             return jsonify({"error": "文件缺少 .webm, .mp4 等扩展名"}), 400
 
-        # 4. 创建一个全新的、安全的文件名 (例如: "a1b2c3d4-e5f6-7890-abcd-1234567890ab.webm")
         filename = f"{uuid.uuid4()}{ext}"
-
-        # --- 【修改后】的逻辑结束 ---
+        # --- 【UUID 修复】结束 ---
 
         # 检查文件类型
         if file.content_type.startswith('image/'):
-            # --- 图片处理逻辑 (基本不变) ---
             image_bytes = file.read()
-            task = process_image_task.delay(image_bytes)  #
+            task = process_image_task.delay(image_bytes)
             return jsonify({
                 "task_id": task.id,
                 "status_url": url_for('task_status', task_id=task.id)
             }), 202
 
         elif file.content_type.startswith('video/'):
-            # --- 视频处理逻辑 (新) ---
-            # 将视频保存到共享卷的临时上传目录
-            # (注意：这里现在使用我们新生成的 'filename')
-            temp_path = os.path.join(UPLOAD_FOLDER, filename)  # <--- 使用新的 filename
+            temp_path = os.path.join(UPLOAD_FOLDER, filename)
             file.save(temp_path)
-
-            # 调用新的视频任务，传递的是文件路径，而不是文件内容
             task = process_video_task.delay(temp_path)
             return jsonify({
                 "task_id": task.id,
@@ -99,7 +88,6 @@ def task_status(task_id):
     task = celery_app.AsyncResult(task_id)
     response = {'state': task.state, 'status': str(task.info)}
     if task.state == 'SUCCESS':
-        # 如果成功，直接在状态查询里就返回结果URL
         response['result_url'] = url_for('get_result', task_id=task.id)
     return jsonify(response)
 
@@ -109,12 +97,25 @@ def get_result(task_id):
     """根据任务ID获取完整的JSON分析报告"""
     task = celery_app.AsyncResult(task_id)
     if task.ready() and task.state == 'SUCCESS':
-        # 从Celery结果后端获取完整的“分析报告”字典
         analysis_report = task.get()
-        # 将这个字典作为JSON响应直接返回给前端
         return jsonify(analysis_report)
     else:
         return jsonify({"error": "任务尚未完成或已失败"}), 404
+
+
+# --- 2. 【新增的路由】，用于提供 /static/results 下的文件 ---
+@app.route('/static/results/<path:path>')
+def send_static_result(path):
+    """
+    这个新路由会捕获所有 /static/results/ 开头的请求
+    'path' 变量会包含 URL 中 'results/' 之后的所有内容
+    例如: "a4985629..._result/a4985629....webm"
+    """
+    # 我们从 '/app/static/results' 目录中安全地发送文件
+    return send_from_directory(os.path.join(STATIC_FOLDER, 'results'), path)
+
+
+# --- 【新增路由】结束 ---
 
 
 if __name__ == '__main__':

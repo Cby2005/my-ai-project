@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>机器学习大作业 - 图像识别系统</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: auto; }
+        img { max-width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>机器学习大作业 - 图像识别演示</h1>
+        <p>请上传一张图片，并选择一个模型进行分析。</p>
+
+        <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
+
+            <fieldset>
+                <legend><strong>第1步: 选择模型</strong> [cite: 50]</legend>
+                <label for="model_select">选择一个算法模型:</label>
+                <select name="model_select" id="model_select">
+                    <option value="yolov8n">YOLOv8-Nano (速度最快)</option>
+                    <option value="yolov8s">YOLOv8-Small (均衡)</option>
+                    <option value="rtdetr_l">RT-DETR-Large (精度最高)</option>
+                </select>
+            </fieldset>
+
+            <br>
+
+            <fieldset>
+                <legend><strong>第2步: 上传图片</strong></legend>
+                <label for="image_file">选择图片:</label>
+                <input type="file" name="image" id="image_file" required>
+            </fieldset>
+
+            <br>
+
+            <input type="submit" value="上传并开始检测">
+        </form>
+
+        <hr>
+
+        <h2>检测结果</h2>
+        <div id="result">
+            <p>请上传图片以查看结果...</p>
+            </div>
+
+        <script>
+            document.getElementById('uploadForm').addEventListener('submit', function(event) {
+                event.preventDefault(); // 阻止表单默认提交
+
+                let formData = new FormData(this);
+                let resultDiv = document.getElementById('result');
+                resultDiv.innerHTML = '<p><strong>正在处理中，请稍候...</strong> (大模型可能需要10-20秒)</p>';
+
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.job_id) {
+                        // 开始轮询检查结果
+                        checkJobStatus(data.job_id);
+                    } else {
+                        resultDiv.innerHTML = `<p style="color: red;">上传失败: ${data.error}</p>`;
+                    }
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = `<p style="color: red;">请求错误: ${error}</eNter>`;
+                });
+            });
+
+            function checkJobStatus(jobId) {
+                let resultDiv = document.getElementById('result');
+                let intervalId = setInterval(() => {
+                    fetch(`/result/${jobId}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'completed') {
+                                // 任务完成
+                                clearInterval(intervalId);
+                                resultDiv.innerHTML = `
+                                    <h3>处理完成!</h3>
+                                    <p>使用的模型: ${data.model_used}</p>
+                                    <img src="${data.image_url}?t=${new Date().getTime()}" alt="检测结果">
+                                `;
+                            } else if (data.status === 'failed') {
+                                // 任务失败
+                                clearInterval(intervalId);
+                                resultDiv.innerHTML = `<p style="color: red;">处理失败: ${data.error}</p>`;
+                            } else {
+                                // 仍在处理中...
+                                resultDiv.innerHTML = '<p><strong>正在处理中，请稍候...</strong> (大模型可能需要10-20秒)</p>';
+                            }
+                        })
+                        .catch(error => {
+                            clearInterval(intervalId);
+                            resultDiv.innerHTML = `<p style="color: red;">检查结果时出错: ${error}</p>`;
+                        });
+                }, 2000); // 每 2 秒检查一次
+            }
+        </script>
+    </div>
+</body>
+</html>
