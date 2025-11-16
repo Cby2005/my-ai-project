@@ -27,10 +27,10 @@ except ImportError:
         print("警告: scipy 模块也不可用")
 celery_app = Celery(
     'tasks',
-     broker='redis://redis:6379/0',
-     backend='redis://redis:6379/0'
-   # broker='redis://localhost:6379/0',
-    #backend='redis://localhost:6379/0'
+#     broker='redis://redis:6379/0',
+ #    backend='redis://redis:6379/0'
+    broker='redis://localhost:6379/0',
+    backend='redis://localhost:6379/0'
 )
 
 print("Worker: 正在加载自定义模型...")
