@@ -11,12 +11,14 @@ from flask_cors import CORS  # 添加这行
 app = Flask(__name__)
 CORS(app)  # 添加这行
 #app.config.update(
- #   CELERY_BROKER_URL='redis://redis:6379/0',
+ # CELERY_BROKER_URL='redis://redis:6379/0',
   #  CELERY_RESULT_BACKEND='redis://redis:6379/0'
 #)
 app.config.update(
-    CELERY_BROKER_URL='redis://localhost:6379/0',  # 本地Redis
-    CELERY_RESULT_BACKEND='redis://localhost:6379/0'
+CELERY_BROKER_URL='redis://redis:6379/0',
+  CELERY_RESULT_BACKEND='redis://redis:6379/0'
+    #CELERY_BROKER_URL='redis://localhost:6379/0',  # 本地Redis
+    #CELERY_RESULT_BACKEND='redis://localhost:6379/0'
 )
 
 # 共享卷的路径，对应 docker-compose.yml
