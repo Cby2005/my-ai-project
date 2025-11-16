@@ -1,0 +1,88 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>视频播放深度测试</title>
+    <style>
+        .container { margin: 20px; }
+        .video-container { margin: 10px 0; }
+        .status { padding: 10px; margin: 5px 0; border-radius: 5px; }
+        .error { background: #ffe6e6; color: #d00; }
+        .info { background: #e6f7ff; color: #0066cc; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>视频播放深度测试</h1>
+
+        <div class="video-container">
+            <h3>测试视频:</h3>
+            <video id="testVideo" controls width="640" height="360"
+                   onerror="onVideoError(event)"
+                   onloadstart="onLoadStart(event)"
+                   onloadeddata="onLoadedData(event)"
+                   oncanplay="onCanPlay(event)"
+                   onwaiting="onWaiting(event)"
+                   onstalled="onStalled(event)">
+                <source src="http://localhost:5000/static/results/8f505dc3-13f6-495a-881b-2e699d5735ff_result/8f505dc3-13f6-495a-881b-2e699d5735ff.mp4" type="video/mp4">
+            </video>
+        </div>
+
+        <div id="statusArea"></div>
+
+        <button onclick="checkVideoState()">检查视频状态</button>
+    </div>
+
+    <script>
+        const statusArea = document.getElementById('statusArea');
+        const video = document.getElementById('testVideo');
+
+        function logStatus(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.textContent = new Date().toLocaleTimeString() + ' - ' + message;
+            statusArea.appendChild(div);
+            console.log(message);
+        }
+
+        function onVideoError(event) {
+            const error = video.error;
+            let message = '视频错误: ';
+            if (error) {
+                switch(error.code) {
+                    case error.MEDIA_ERR_ABORTED: message += '播放被中止'; break;
+                    case error.MEDIA_ERR_NETWORK: message += '网络错误'; break;
+                    case error.MEDIA_ERR_DECODE: message += '解码错误'; break;
+                    case error.MEDIA_ERR_SRC_NOT_SUPPORTED: message += '格式不支持'; break;
+                    default: message += '未知错误';
+                }
+                message += ` (代码: ${error.code})`;
+            }
+            logStatus(message, 'error');
+        }
+
+        function onLoadStart(event) { logStatus('开始加载视频数据'); }
+        function onLoadedData(event) { logStatus('视频数据已加载'); }
+        function onCanPlay(event) { logStatus('视频可以播放'); }
+        function onWaiting(event) { logStatus('视频等待数据'); }
+        function onStalled(event) { logStatus('视频数据加载停滞'); }
+
+        function checkVideoState() {
+            logStatus(`视频就绪状态: ${video.readyState}`);
+            logStatus(`网络状态: ${video.networkState}`);
+            logStatus(`当前时间: ${video.currentTime}`);
+            logStatus(`时长: ${video.duration}`);
+            logStatus(`已缓冲: ${video.buffered.length > 0 ? video.buffered.end(0) : 0}`);
+
+            if (video.error) {
+                logStatus(`错误代码: ${video.error.code}`, 'error');
+            }
+        }
+
+        // 初始检查
+        setTimeout(checkVideoState, 1000);
+        setTimeout(checkVideoState, 3000);
+    </script>
+</body>
+</html>
+    

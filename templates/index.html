@@ -52,7 +52,11 @@
                     <p id="status-text" class="text-lg font-semibold text-gray-700"></p>
                     <div id="loader" class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-12 w-12 mx-auto mt-4 hidden"></div>
                 </div>
-
+<div class="mt-4 text-center">
+    <button onclick="testVideoPlayback()" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+        测试视频播放
+    </button>
+</div>
                 <div id="result-area" class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 items-start hidden">
                     <div class="text-center md:col-span-1">
                         <h3 class="text-lg font-semibold text-gray-700 mb-2">原始文件</h3>
@@ -177,68 +181,203 @@
         }
 
         // 【修正】显示结果 (图片或视频)
-        function displayResult(resultUrl) {
-            fetch(resultUrl)
-                .then(response => response.json())
-                .then(report => {
+       function displayResult(resultUrl) {
+    fetch(resultUrl)
+        .then(response => response.json())
+        .then(report => {
+            console.log('收到分析报告:', report); // 添加调试信息
 
-                    if (report.is_video) {
-                        // --- 视频显示逻辑 ---
-                        resultVideo.querySelector('source').src = report.video_url;
-                        resultVideo.load();
-                        resultVideo.classList.remove('hidden', 'fade-in');
-                        void resultVideo.offsetWidth; // 触发 CSS 动画
-                        resultVideo.classList.add('fade-in');
+            if (report.is_video) {
+                // --- 视频显示逻辑 ---
+                console.log('处理视频结果，URL:', report.video_url);
 
-                    } else {
-                        // --- 图片显示逻辑 ---
-                        resultImage.src = `data:image/jpeg;base64,${report.image_data}`;
-                        resultImage.classList.remove('hidden', 'fade-in');
-                        void resultImage.offsetWidth; // 触发 CSS 动画
-                        resultImage.classList.add('fade-in');
-                    }
+                // 确保URL是完整的
+                let videoUrl = report.video_url;
+                if (!videoUrl.startsWith('http')) {
+                    // 如果是相对路径，添加基础URL
+                    videoUrl = window.location.origin + videoUrl;
+                }
 
-                    // --- 统计数据逻辑 (不变) ---
-                    analysisDataContainer.innerHTML = '';
-                    const data = report.analysis_data;
+                console.log('完整视频URL:', videoUrl);
 
-                    const totalP = document.createElement('p');
-                    totalP.innerHTML = `<strong>总物体数:</strong> <span class="text-blue-600 font-bold">${data.total_objects}</span>`;
-                    analysisDataContainer.appendChild(totalP);
+                // 设置视频源
+                const source = resultVideo.querySelector('source');
+                source.src = videoUrl;
 
-                    const breakdownTitle = document.createElement('p');
-                    breakdownTitle.innerHTML = `<strong>类别明细:</strong>`;
-                    analysisDataContainer.appendChild(breakdownTitle);
+                // 根据文件扩展名设置正确的MIME类型
+                if (videoUrl.toLowerCase().endsWith('.avi')) {
+                    source.type = 'video/x-msvideo';
+                } else if (videoUrl.toLowerCase().endsWith('.mp4')) {
+                    source.type = 'video/mp4';
+                } else if (videoUrl.toLowerCase().endsWith('.webm')) {
+                    source.type = 'video/webm';
+                }
 
-                    const ul = document.createElement('ul');
-                    ul.className = 'list-disc list-inside ml-4 text-gray-600';
-                    if (Object.keys(data.class_counts).length > 0) {
-                        for (const [className, count] of Object.entries(data.class_counts)) {
-                            const li = document.createElement('li');
-                            li.textContent = `${className}: ${count} 个`;
-                            ul.appendChild(li);
-                        }
-                    } else {
-                        const li = document.createElement('li');
-                        li.textContent = '未检测到任何已知类别。';
-                        ul.appendChild(li);
-                    }
-                    analysisDataContainer.appendChild(ul);
+                // 重新加载视频
+                resultVideo.load();
 
-                    statusArea.classList.add('hidden');
-                    resultArea.classList.remove('hidden');
-                })
-                .catch(err => {
-                    showError(`加载结果报告失败: ${err.message}`);
+                // 添加事件监听来调试
+                resultVideo.addEventListener('loadeddata', function() {
+                    console.log('视频数据加载完成');
+                    resultVideo.classList.remove('hidden');
+                    resultVideo.play().catch(e => {
+                        console.log('自动播放被阻止:', e);
+                    });
                 });
-        }
 
-        function showError(message) {
-            errorMessage.textContent = message;
-            errorMessage.classList.remove('hidden');
-            loader.classList.add('hidden');
-            statusText.textContent = '';
+                resultVideo.addEventListener('error', function(e) {
+                    console.error('视频加载错误:', e);
+                    console.log('视频错误代码:', resultVideo.error?.code);
+                    console.log('视频错误信息:', resultVideo.error?.message);
+                    showError(`视频加载失败: ${resultVideo.error?.message || '未知错误'}`);
+                });
+
+                resultVideo.addEventListener('canplay', function() {
+                    console.log('视频可以播放');
+                });
+
+            }  else {
+    // --- 图片显示逻辑 ---
+    console.log('处理图片结果，base64数据长度:', report.image_data?.length);
+
+    // 检查base64数据是否存在
+    if (!report.image_data) {
+        console.error('错误: 分析报告中缺少image_data字段');
+        showError('分析结果中缺少图片数据');
+        return;
+    }
+
+    // 确保base64数据格式正确
+    let base64Data = report.image_data;
+
+    // 如果base64数据不包含data URL前缀，添加它
+    if (!base64Data.startsWith('data:')) {
+        base64Data = `data:image/jpeg;base64,${base64Data}`;
+    }
+
+    console.log('设置图片src，数据长度:', base64Data.length);
+
+    // 使用Image对象预加载来检测图片是否有效
+    const testImg = new Image();
+    testImg.onload = function() {
+        console.log('图片预加载成功');
+        resultImage.src = base64Data;
+        resultImage.classList.remove('hidden');
+
+        // 重新触发动画
+        resultImage.classList.remove('fade-in');
+        void resultImage.offsetWidth; // 触发重排
+        resultImage.classList.add('fade-in');
+    };
+    testImg.onerror = function() {
+        console.error('图片预加载失败');
+        console.log('base64数据前100字符:', base64Data.substring(0, 100));
+        showError('结果图片数据格式错误，无法显示');
+    };
+    testImg.src = base64Data;
+}
+            // --- 统计数据逻辑 ---
+            displayAnalysisData(report.analysis_data);
+
+            statusArea.classList.add('hidden');
+            resultArea.classList.remove('hidden');
+        })
+        .catch(err => {
+            console.error('加载结果报告失败:', err);
+            showError(`加载结果报告失败: ${err.message}`);
+        });
+}
+function displayAnalysisData(data) {
+    analysisDataContainer.innerHTML = '';
+
+    const totalP = document.createElement('p');
+    totalP.innerHTML = `<strong>总物体数:</strong> <span class="text-blue-600 font-bold">${data.total_objects}</span>`;
+    analysisDataContainer.appendChild(totalP);
+
+    if (data.class_counts && Object.keys(data.class_counts).length > 0) {
+        const breakdownTitle = document.createElement('p');
+        breakdownTitle.innerHTML = `<strong>类别明细:</strong>`;
+        analysisDataContainer.appendChild(breakdownTitle);
+
+        const ul = document.createElement('ul');
+        ul.className = 'list-disc list-inside ml-4 text-gray-600';
+
+        for (const [className, count] of Object.entries(data.class_counts)) {
+            const li = document.createElement('li');
+            li.textContent = `${className}: ${count} 个`;
+            ul.appendChild(li);
         }
+        analysisDataContainer.appendChild(ul);
+    } else {
+        const noDataMsg = document.createElement('p');
+        noDataMsg.textContent = '未检测到具体类别信息。';
+        noDataMsg.className = 'text-gray-500';
+        analysisDataContainer.appendChild(noDataMsg);
+    }
+}
+function testVideoPlayback() {
+    // 使用已知存在的视频URL进行测试
+    const testVideoUrl = 'http://localhost:5000/static/results/c07edc8c-2200-4514-9b86-ed88564cdb8b_result/c07edc8c-2200-4514-9b86-ed88564cdb8b.mp4';
+
+    console.log('测试视频URL:', testVideoUrl);
+
+    // 创建一个临时视频元素进行测试
+    const tempVideo = document.createElement('video');
+    tempVideo.controls = true;
+    tempVideo.style.width = '100%';
+
+    const source = document.createElement('source');
+    source.src = testVideoUrl;
+    source.type = 'video/x-msvideo';
+
+    tempVideo.appendChild(source);
+
+    tempVideo.addEventListener('loadeddata', function() {
+        console.log('测试视频加载成功');
+        alert('测试视频加载成功！视频可以播放。');
+    });
+
+    tempVideo.addEventListener('error', function(e) {
+        console.error('测试视频加载失败:', e);
+        console.log('错误详情:', tempVideo.error);
+        alert('测试视频加载失败。请检查控制台获取详细信息。');
+    });
+
+    // 添加到页面进行测试
+    const testContainer = document.createElement('div');
+    testContainer.innerHTML = '<h3 class="text-lg font-semibold mb-2">视频播放测试</h3>';
+    testContainer.appendChild(tempVideo);
+    testContainer.appendChild(document.createElement('br'));
+
+    document.body.appendChild(testContainer);
+
+    tempVideo.load();
+}
+function checkVideoCompatibility() {
+    const video = document.createElement('video');
+    const formats = [
+        { type: 'video/x-msvideo', name: 'AVI' },
+        { type: 'video/mp4', name: 'MP4' },
+        { type: 'video/webm', name: 'WebM' },
+        { type: 'video/ogg', name: 'OGG' }
+    ];
+
+    console.log('浏览器视频格式支持检查:');
+    formats.forEach(format => {
+        const canPlay = video.canPlayType(format.type);
+        console.log(`${format.name} (${format.type}): ${canPlay}`);
+    });
+}
+
+// 页面加载时检查
+window.addEventListener('load', checkVideoCompatibility);
+        function showError(message) {
+    console.error('错误信息:', message); // 添加控制台输出
+    errorMessage.textContent = message;
+    errorMessage.classList.remove('hidden');
+    loader.classList.add('hidden');
+    statusText.textContent = '处理失败';
+}
 
         // 【修正】重置UI (包含视频和预览)
         function resetUI() {

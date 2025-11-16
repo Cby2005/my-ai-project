@@ -5,3 +5,8 @@ opencv-python
 numpy
 celery
 redis
+
+werkzeug
+flask-cors
+Pillow
+requests

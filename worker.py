@@ -7,14 +7,34 @@ import os  # 导入os库
 
 # --- Celery & AI 模型初始化 ---
 # 'redis' 是我们在docker-compose.yml中定义的服务名
+# 尝试导入 lap，如果失败则使用替代方案
+try:
+    import lap
+
+    LAP_AVAILABLE = True
+    print("lap 模块可用")
+except ImportError:
+    LAP_AVAILABLE = False
+    print("警告: lap 模块不可用，将使用替代方案")
+    # 尝试导入 scipy 作为替代
+    try:
+        from scipy.optimize import linear_sum_assignment
+
+        SCIPY_AVAILABLE = True
+        print("scipy 模块可用，将用作 lap 的替代")
+    except ImportError:
+        SCIPY_AVAILABLE = False
+        print("警告: scipy 模块也不可用")
 celery_app = Celery(
     'tasks',
-    broker='redis://redis:6379/0',
-    backend='redis://redis:6379/0'
+    # broker='redis://redis:6379/0',
+    # backend='redis://redis:6379/0'
+    broker='redis://localhost:6379/0',
+    backend='redis://localhost:6379/0'
 )
 
 print("Worker: 正在加载自定义模型...")
-model = YOLO('best.pt')
+model = YOLO('yolov8n.pt')
 print("Worker: 模型加载完成，准备接收任务！")
 
 
@@ -50,13 +70,14 @@ def process_image(image_bytes):
 
         image_base64 = base64.b64encode(img_encoded).decode('utf-8')
 
-        # 3. 构建最终的“分析报告”
+        # 3. 构建最终的"分析报告"
+        # 在 process_video 函数中，修改返回的 video_url
         analysis_report = {
-            "is_video": False,  # (新) 添加一个标志，告诉前端这是图片
-            "image_data": image_base64,
+            "is_video": False,
+            "image_data": image_base64,  # Base64编码的处理后图片
             "analysis_data": {
-                "total_objects": total_objects,
-                "class_counts": class_counts
+                "total_objects": total_objects,  # 检测到的物体总数
+                "class_counts": class_counts  # 每个类别的数量统计
             }
         }
         return analysis_report
@@ -67,53 +88,106 @@ def process_image(image_bytes):
 
 
 # --- (新) 定义AI分析任务 (视频) ---
-# --- (新) 定义AI分析任务 (视频) ---
 @celery_app.task(name='worker.process_video')
-def process_video(video_path):
-    print(f"Worker: 接收到新视频任务，路径 {video_path}")
+def process_video(video_path, output_format='webm'):
+    print(f"Worker: 接收到新视频任务，路径 {video_path}，输出格式: {output_format}")
     try:
-        # 定义结果保存路径 (对应 docker-compose.yml 中的共享卷)
-        RESULT_DIR = "/app/static/results"
+        RESULT_DIR = "static/results"
         os.makedirs(RESULT_DIR, exist_ok=True)
 
-        # 原始文件名 (例如: "test_video.mp4")
         base_filename = os.path.basename(video_path)
+        base_name = os.path.splitext(base_filename)[0]
+        result_run_name = f"{base_name}_result"
 
-        # (修改) 'name' 应该是 "run" 的名称，不应包含 .mp4
-        # (例如: "test_video_result")
-        result_run_name = f"{os.path.splitext(base_filename)[0]}_result"
+        result_dir_path = os.path.join(RESULT_DIR, result_run_name)
+        os.makedirs(result_dir_path, exist_ok=True)
 
         print(f"Worker: 开始处理视频: {base_filename}")
 
-        # (修改) 'name' 参数现在使用不带 .mp4 的 'result_run_name'
-        model.track(video_path, save=True, project=RESULT_DIR, name=result_run_name, exist_ok=True)
+        # 使用普通检测，不保存视频（我们将手动处理视频编码）
+        results = model.predict(video_path, save=False, project=RESULT_DIR, name=result_run_name, exist_ok=True)
 
-        # YOLO 会将视频保存在: <project>/<name>/<base_filename>
-        # (例如: /app/static/results/test_video_result/test_video.mp4)
+        print(f"Worker: YOLO处理完成，开始手动处理视频编码...")
 
-        # (修改) 我们的URL必须指向YOLO实际保存文件的位置
-        result_url_path = f"/static/results/{result_run_name}/{base_filename}"
+        # 读取原始视频
+        cap = cv2.VideoCapture(video_path)
 
-        # 打印新的保存路径
-        print(f"Worker: 视频处理完成，保存在 {os.path.join(RESULT_DIR, result_run_name, base_filename)}")
+        # 获取视频参数
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        # 清理已处理的上传文件 (从 /app/uploads 删除)
+        # 设置输出文件名和编码器
+        if output_format == 'webm':
+            output_filename = f"{base_name}.webm"
+            # 使用 VP8 编码器用于 WebM
+            fourcc = cv2.VideoWriter_fourcc(*'VP80')
+            mimetype = 'video/webm'
+        else:
+            # 默认回退到 MP4
+            output_filename = f"{base_name}.mp4"
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            mimetype = 'video/mp4'
+
+        output_path = os.path.join(result_dir_path, output_filename)
+
+        # 创建视频写入器
+        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+        frame_count = 0
+        processed_frames = 0
+
+        print(f"Worker: 开始处理视频帧，格式: {output_format}")
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            # 对当前帧进行目标检测
+            frame_results = model(frame)
+
+            # 绘制检测结果
+            annotated_frame = frame_results[0].plot()
+
+            # 写入处理后的帧
+            out.write(annotated_frame)
+
+            frame_count += 1
+            processed_frames += 1
+
+            # 每处理100帧打印一次进度
+            if frame_count % 100 == 0:
+                print(f"Worker: 已处理 {frame_count} 帧")
+
+        cap.release()
+        out.release()
+
+        print(f"Worker: 视频处理完成，共处理 {processed_frames} 帧")
+        print(f"Worker: 输出文件: {output_path}")
+
+        # 构建URL路径
+        result_url_path = f"/static/results/{result_run_name}/{output_filename}"
+        print(f"Worker: 最终视频URL路径: {result_url_path}")
+
+        # 清理临时文件
         os.remove(video_path)
 
-        # 3. 构建最终的“分析报告”
+        # 构建分析报告
         analysis_report = {
             "is_video": True,
-            "video_url": result_url_path,  # (修改) 返回正确的URL
+            "video_url": result_url_path,
             "analysis_data": {
                 "total_objects": "N/A (视频处理)",
-                "class_counts": {}
+                "class_counts": {},
+                "processed_frames": processed_frames,
+                "output_format": output_format
             }
         }
         return analysis_report
 
     except Exception as e:
         print(f"Worker: 视频任务处理失败: {e}")
-        # 如果处理失败，也删除临时文件
         if os.path.exists(video_path):
             os.remove(video_path)
         raise
